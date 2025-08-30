@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
       );
     }
     
-    console.log("[API] Starting Daytona generation for prompt:", prompt);
+    console.log("[API] Starting OpenComponent generation for prompt:", prompt);
     
     // Create a streaming response
     const encoder = new TextEncoder();
@@ -30,8 +30,8 @@ export async function POST(req: NextRequest) {
     // Start the async generation
     (async () => {
       try {
-        // Use the generate-in-daytona.ts script
-        const scriptPath = path.join(process.cwd(), "scripts", "generate-in-daytona.ts");
+        // Use the generate-oc-component-in-daytona.ts script
+        const scriptPath = path.join(process.cwd(), "scripts", "generate-oc-component-in-daytona.ts");
         const child = spawn("npx", ["tsx", scriptPath, prompt], {
           env: {
             ...process.env,
@@ -41,7 +41,8 @@ export async function POST(req: NextRequest) {
         });
         
         let sandboxId = "";
-        let previewUrl = "";
+        let componentUrl = "";
+        let componentName = "";
         let buffer = "";
         
         // Capture stdout
@@ -113,10 +114,16 @@ export async function POST(req: NextRequest) {
                   sandboxId = sandboxMatch[1];
                 }
                 
-                // Extract preview URL
-                const previewMatch = output.match(/Preview URL: (https:\/\/[^\s]+)/);
-                if (previewMatch) {
-                  previewUrl = previewMatch[1];
+                // Extract component name
+                const componentMatch = output.match(/Component name: ([^\s]+)/);
+                if (componentMatch) {
+                  componentName = componentMatch[1];
+                }
+                
+                // Extract component URL
+                const componentUrlMatch = output.match(/Component URL: (http:\/\/[^\s]+)/);
+                if (componentUrlMatch) {
+                  componentUrl = componentUrlMatch[1];
                 }
               }
             }
@@ -152,18 +159,20 @@ export async function POST(req: NextRequest) {
           child.on("error", reject);
         });
         
-        // Send completion with preview URL
-        if (previewUrl) {
+        // Send completion with component information
+        if (componentUrl) {
           await writer.write(
             encoder.encode(`data: ${JSON.stringify({ 
               type: "complete", 
               sandboxId,
-              previewUrl 
+              componentName,
+              componentUrl,
+              previewUrl: componentUrl // Keep previewUrl for backward compatibility
             })}\n\n`)
           );
-          console.log(`[API] Generation complete. Preview URL: ${previewUrl}`);
+          console.log(`[API] OpenComponent generation complete. Component: ${componentName}, URL: ${componentUrl}`);
         } else {
-          throw new Error("Failed to get preview URL");
+          throw new Error("Failed to get component URL - component may not have published successfully");
         }
         
         // Send done signal
